@@ -1,0 +1,199 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cicd-backend
+  labels:
+    app: cicd-optimizer
+    component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cicd-optimizer
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: cicd-optimizer
+        component: backend
+    spec:
+      containers:
+      - name: backend
+        image: cicd-backend:latest
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: MONGODB_URL
+          valueFrom:
+            secretKeyRef:
+              name: cicd-secrets
+              key: mongodb-url
+        - name: CIRCLECI_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: cicd-secrets
+              key: circleci-token
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cicd-ml-engine
+  labels:
+    app: cicd-optimizer
+    component: ml-engine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cicd-optimizer
+      component: ml-engine
+  template:
+    metadata:
+      labels:
+        app: cicd-optimizer
+        component: ml-engine
+    spec:
+      containers:
+      - name: ml-engine
+        image: cicd-ml-engine:latest
+        ports:
+        - containerPort: 8001
+          name: http
+        env:
+        - name: MONGODB_URL
+          valueFrom:
+            secretKeyRef:
+              name: cicd-secrets
+              key: mongodb-url
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cicd-prometheus
+  labels:
+    app: cicd-optimizer
+    component: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cicd-optimizer
+      component: prometheus
+  template:
+    metadata:
+      labels:
+        app: cicd-optimizer
+        component: prometheus
+    spec:
+      containers:
+      - name: prometheus
+        image: prom/prometheus:latest
+        ports:
+        - containerPort: 9090
+          name: http
+        args:
+          - '--config.file=/etc/prometheus/prometheus.yml'
+          - '--storage.tsdb.path=/prometheus'
+        volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus
+        - name: storage
+          mountPath: /prometheus
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-config
+      - name: storage
+        persistentVolumeClaim:
+          claimName: prometheus-pvc
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cicd-grafana
+  labels:
+    app: cicd-optimizer
+    component: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cicd-optimizer
+      component: grafana
+  template:
+    metadata:
+      labels:
+        app: cicd-optimizer
+        component: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:latest
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          value: admin
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: cicd-secrets
+              key: grafana-password
+        volumeMounts:
+        - name: storage
+          mountPath: /var/lib/grafana
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      volumes:
+      - name: storage
+        persistentVolumeClaim:
+          claimName: grafana-pvc

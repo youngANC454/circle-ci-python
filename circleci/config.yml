@@ -1,0 +1,116 @@
+version: 2.1
+
+
+executors:
+  python-executor:
+    docker:
+      - image: cimg/python:3.11
+    working_directory: ~/project
+
+  docker-executor:
+    docker: 
+      - image: cimg/base:stable
+    working_directory: ~/project
+
+
+jobs:
+  test-backend:
+    executor: python-executor
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - backend-deps-{{ checksum "backend/requirement.txt" }}
+      - run:
+          name: Install dependencies
+          command : |
+            cd backend
+            pip install -r requirements.txt
+      - save_cache:
+          key: backend-deps-{{ checksum "backend/requirements.txt" }}
+          paths:
+            - ~/.cache/pip
+      - run:
+          name: Run tests
+          commands: | 
+            cd backend
+            python tests/ || true
+      - run:
+          name: Lint code
+          command: |
+            cd backend
+            pip install flake8
+            flake8 app/ --max-line-length=100 || true
+
+test-ml-engine:
+  executor: python-executor
+  steps:
+    - checkout
+    - restore_cache:
+        keys:
+          - ml-deps-{{ checksum "ml_engine_requirements.txt" }}
+    - run:
+        name: Install dependencies
+        command: | 
+          cd ml_engine
+          pip install -r requirements.txt
+    - save_cache:
+        key: ml-deps-{{ checksum "ml_engine/requirements.txt" }}
+        paths: 
+          - ~/.cache/pip
+    - run: 
+        name: Run tests
+        command: | 
+          cd ml_engine
+          pytest tests/ || true
+
+
+build_images:
+  executor: docker-executor
+  steps:
+    - checkout
+    - setup_remote_docker:
+        version: 20.10.14
+    - run:
+        name: Build backend Image
+        command: | 
+          docker build -t cicd-backend:${CIRCLE_SHA1} ./backend
+    - run: 
+        name: Build ML Engine Image
+        command: |
+          docker build -t cicd-ml-engine:${CIRCLE_SHA1} ./ml_engine
+    
+deploy:
+  executor: docker-executor
+  steps:
+    - checkout
+    - run:
+        name: Deploy
+        command: | 
+          echo "Deployment step - configure based on your infra"
+
+workflows:
+  version: 2
+  test-and-build:
+    jobs:
+      - test-backend
+      - test-ml-engine
+      - build-images:
+          requires:
+            - test-backend
+            - test-ml-engine
+          filters:
+            branches:
+              only:
+                - main
+                - develop
+      - deploy:
+          requires:
+            - build-images
+          filters:
+            branches:
+              only: main
+
+
+
+

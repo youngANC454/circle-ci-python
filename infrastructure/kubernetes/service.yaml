@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cicd-backend
+  labels:
+    app: cicd-optimizer
+    component: backend
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: cicd-optimizer
+    component: backend
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cicd-ml-engine
+  labels:
+    app: cicd-optimizer
+    component: ml-engine
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8001
+    targetPort: 8001
+    protocol: TCP
+    name: http
+  selector:
+    app: cicd-optimizer
+    component: ml-engine
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cicd-prometheus
+  labels:
+    app: cicd-optimizer
+    component: prometheus
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+    name: http
+  selector:
+    app: cicd-optimizer
+    component: prometheus
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cicd-grafana
+  labels:
+    app: cicd-optimizer
+    component: grafana
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 3000
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: cicd-optimizer
+    component: grafana
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  labels:
+    app: cicd-optimizer
+    component: database
+spec:
+  type: ClusterIP
+  ports:
+  - port: 27017
+    targetPort: 27017
+    protocol: TCP
+    name: mongodb
+  selector:
+    app: cicd-optimizer
+    component: database
+
+---
+# Ingress for external access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cicd-optimizer-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - cicd-optimizer.yourdomain.com
+    secretName: cicd-optimizer-tls
+  rules:
+  - host: cicd-optimizer.yourdomain.com
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: cicd-backend
+            port:
+              number: 8000
+      - path: /ml
+        pathType: Prefix
+        backend:
+          service:
+            name: cicd-ml-engine
+            port:
+              number: 8001
+      - path: /grafana
+        pathType: Prefix
+        backend:
+          service:
+            name: cicd-grafana
+            port:
+              number: 3000
+      - path: /prometheus
+        pathType: Prefix
+        backend:
+          service:
+            name: cicd-prometheus
+            port:
+              number: 9090

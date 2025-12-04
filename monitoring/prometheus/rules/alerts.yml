@@ -1,0 +1,79 @@
+groups:
+  - name: cicd_alerts
+    interval: 30s
+    rules:
+      # High failure rate alert
+      - alert: HighBuildFailureRate
+        expr: |
+          (rate(build_failures_total[5m]) / rate(builds_total[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High build failure rate detected"
+          description: "Build failure rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+
+      # Service down alert
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "{{ $labels.job }} has been down for more than 2 minutes"
+
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is {{ $value | humanize }}%"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is {{ $value | humanize }}%"
+
+      # Disk space low
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100 < 15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Available disk space is {{ $value | humanize }}%"
+
+      # Container restart
+      - alert: ContainerRestarted
+        expr: |
+          rate(container_last_seen{name!=""}[5m]) > 0
+        for: 1m
+        labels:
+          severity: info
+        annotations:
+          summary: "Container {{ $labels.name }} restarted"
+          description: "Container has been restarted"
+
+      # API response time high
+      - alert: APISlowResponse
+        expr: |
+          histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API response time is high"
+          description: "95th percentile response time is {{ $value | humanizeDuration }}"
